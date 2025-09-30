@@ -2,8 +2,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { initUI } from './ui.js';
 
-const container = document.getElementById('app');
+const container = document.getElementById('viewerCanvas');
+const ui = initUI();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
@@ -11,13 +14,31 @@ scene.background = new THREE.Color(0x000000);
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.physicallyCorrectLights = true;
 renderer.outputEncoding = THREE.sRGBEncoding;
 container.appendChild(renderer.domElement);
+
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environment = envTexture;
+pmremGenerator.dispose();
+
+const clock = new THREE.Clock();
+
+function resizeRenderer() {
+  const { clientWidth, clientHeight } = container;
+  if (!clientWidth || !clientHeight) {
+    return;
+  }
+  renderer.setSize(clientWidth, clientHeight, false);
+  camera.aspect = clientWidth / clientHeight;
+  camera.updateProjectionMatrix();
+}
+
+resizeRenderer();
 
 // Controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -54,6 +75,15 @@ floor.position.y = 0;
 floor.receiveShadow = true;
 scene.add(floor);
 
+// Animation state
+let mixer = null;
+let fanAnimations = [];
+let onOffAnimation = null;
+let powerButton = null;
+let isPowered = false;
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
 // Load model
 const loader = new GLTFLoader();
 // Configure DRACO loader to decode compressed meshes. Using Google's CDN for decoder files.
@@ -62,30 +92,76 @@ dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
 loader.setDRACOLoader(dracoLoader);
 loader.load('/assets/models/PC.glb', (gltf) => {
   const model = gltf.scene;
-  // enable shadows on meshes
+  
+  // Setup animation mixer
+  mixer = new THREE.AnimationMixer(model);
+  
+  // Find and setup animations
+  const fanAnimationNames = ['Fan_front_01', 'Fan_front_02', 'Fan_front_03', 'Fan_back_01', 'Fan_mid_01', 'Fan_gpu_01', 'Fan_gpu_02'];
+  
+  console.log('Available animations:');
+  gltf.animations.forEach(clip => {
+    console.log('- Animation name:', clip.name);
+  });
+  
+  gltf.animations.forEach(clip => {
+    if (fanAnimationNames.includes(clip.name)) {
+      const action = mixer.clipAction(clip);
+      action.setLoop(THREE.LoopRepeat);
+      fanAnimations.push(action);
+      console.log('Fan animation added:', clip.name);
+    } else if (clip.name === 'OnOff') {
+      onOffAnimation = mixer.clipAction(clip);
+      onOffAnimation.setLoop(THREE.LoopOnce);
+      onOffAnimation.clampWhenFinished = true;
+      console.log('OnOff animation found and set up');
+    }
+  });
+
+  console.log('Fan animations count:', fanAnimations.length);
+  console.log('OnOff animation found:', !!onOffAnimation);
+
+  // enable shadows on meshes and find PowerButton
   model.traverse((n) => {
     if (n.isMesh) {
       n.castShadow = true;
       n.receiveShadow = true;
+      
+      // Find the PowerButton mesh
+      if (n.name === 'PowerButton' || n.name === 'PowerButton_1') {
+        powerButton = n;
+        console.log('PowerButton mesh found:', n.name, n);
+        console.log('PowerButton position:', n.position);
+        console.log('PowerButton material:', n.material);
+        
+        // Add a visual helper to highlight the power button (optional)
+        const buttonHelper = new THREE.BoxHelper(n, 0x00ff00);
+        scene.add(buttonHelper);
+      }
+      
       // If mesh uses a material named "Glass", replace it with a glass-like material
       const replaceWithGlass = (mat) => {
-        // preserve common maps/colors where possible
         const params = {};
         if (mat.map) params.map = mat.map;
         if (mat.color) params.color = mat.color.clone();
-        // glass-like physical material
+        // Match the original Threejs_glass material specs more closely
         return new THREE.MeshPhysicalMaterial({
           ...params,
           transparent: true,
           opacity: 1,
-          transmission: 1.0,
-          roughness: 0.05,
+          transmission: 1,
+          roughness: 0, // Perfectly smooth like original
           metalness: 0,
-          ior: 1.45,
-          clearcoat: 1.0,
-          clearcoatRoughness: 0.0,
-          reflectivity: 0.5,
-          side: THREE.DoubleSide,
+          ior: 1.5, // Standard glass IOR
+          thickness: 0, // Match original
+          attenuationColor: new THREE.Color(0xffffff),
+          specularIntensity: 1,
+          specularColor: new THREE.Color(0xffffff),
+          envMapIntensity: 1,
+          reflectivity: 0.5, // Match original
+          clearcoat: 0, // Match original (no clearcoat)
+          clearcoatRoughness: 0,
+          side: THREE.DoubleSide, // Match original side: 2
         });
       };
 
@@ -100,6 +176,20 @@ loader.load('/assets/models/PC.glb', (gltf) => {
   });
 
   scene.add(model);
+
+  // Debug: Log all mesh names to help identify the correct power button name
+  console.log('All mesh names in the model:');
+  model.traverse((n) => {
+    if (n.isMesh) {
+      console.log('- Mesh name:', n.name);
+    }
+  });
+  
+  if (!powerButton) {
+    console.warn('PowerButton mesh not found! Check the mesh names above.');
+  } else {
+    console.log('PowerButton successfully found and set up for clicking.');
+  }
 
   // Compute bounding box to place model on the floor and frame the camera
   const box = new THREE.Box3().setFromObject(model);
@@ -169,16 +259,88 @@ loader.load('/assets/models/PC.glb', (gltf) => {
 
 // Handle resize
 function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  resizeRenderer();
 }
 window.addEventListener('resize', onWindowResize);
+
+function onCanvasPointerDown(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+  const intersects = raycaster.intersectObjects(scene.children, true);
+
+  if (intersects.length === 0) {
+    console.log('No mesh clicked');
+    return;
+  }
+
+  const clickedObject = intersects[0].object;
+  console.log('Clicked on mesh:', clickedObject.name);
+  console.log('Mesh object:', clickedObject);
+  console.log('Distance:', intersects[0].distance);
+  console.log('Point:', intersects[0].point);
+
+  // If the power button has child meshes, allow clicking any descendant
+  if (powerButton && (clickedObject === powerButton || powerButton.children.includes(clickedObject))) {
+    console.log('Power button clicked!');
+    togglePower();
+  }
+}
+
+function togglePower() {
+  console.log('Power button clicked! Current state:', isPowered);
+  
+  if (!mixer) {
+    console.error('No mixer available');
+    return;
+  }
+
+  // Always trigger the OnOff animation
+  if (onOffAnimation) {
+    console.log('Playing OnOff animation');
+    onOffAnimation.reset();
+    onOffAnimation.play();
+  } else {
+    console.warn('OnOff animation not found - check animation names in console');
+  }
+
+  isPowered = !isPowered;
+  console.log('New power state:', isPowered);
+
+  if (isPowered) {
+    console.log('Starting', fanAnimations.length, 'fan animations');
+    // Start all fan animations
+    fanAnimations.forEach((action, index) => {
+      action.reset();
+      action.play();
+      console.log('Started fan animation', index);
+    });
+  } else {
+    console.log('Stopping', fanAnimations.length, 'fan animations');
+    // Gradually stop all fan animations
+    fanAnimations.forEach((action, index) => {
+      // Fade out over 2 seconds
+      action.fadeOut(2.0);
+      console.log('Fading out fan animation', index);
+    });
+  }
+}
+
+renderer.domElement.addEventListener('pointerdown', onCanvasPointerDown);
 
 // Animation loop
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  
+  // Update animation mixer
+  if (mixer) {
+    const delta = clock.getDelta();
+    mixer.update(delta);
+  }
+  
   renderer.render(scene, camera);
 }
 animate();

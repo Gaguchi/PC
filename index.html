@@ -3,11 +3,180 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Three + Vite</title>
+    <title>BuildCores Benchmark Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div class="game-overlay" id="gameOverlay" aria-modal="true" role="dialog">
+      <div class="game-overlay__panel">
+        <header>
+          <p class="eyebrow">Benchmark setup</p>
+          <h1>Select a game to tune your rig.</h1>
+          <p class="subtext">We’ll preload a build that hits elite-tier performance for the chosen title.</p>
+        </header>
+        <div class="game-grid" id="gameGrid">
+          <button class="game-option" data-game="cyberpunk2077">
+            <span class="game-title">Cyberpunk 2077</span>
+            <span class="game-meta">Path Tracing Ultra</span>
+          </button>
+          <button class="game-option" data-game="starfield">
+            <span class="game-title">Starfield</span>
+            <span class="game-meta">Ultra + FSR 3</span>
+          </button>
+          <button class="game-option" data-game="helldivers2">
+            <span class="game-title">Helldivers II</span>
+            <span class="game-meta">Maximum setting preset</span>
+          </button>
+          <button class="game-option" data-game="cs2">
+            <span class="game-title">Counter-Strike 2</span>
+            <span class="game-meta">Tournament spec</span>
+          </button>
+          <button class="game-option" data-game="fortnite">
+            <span class="game-title">Fortnite</span>
+            <span class="game-meta">Unreal Engine 5 / Nanite</span>
+          </button>
+          <button class="game-option" data-game="forza">
+            <span class="game-title">Forza Horizon 5</span>
+            <span class="game-meta">Extreme preset</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
+          <span class="logo-mark">BC</span>
+          <div>
+            <p class="brand-title">BuildCores</p>
+            <p class="brand-subtitle">Benchmark Lab</p>
+          </div>
+        </div>
+        <nav class="sidebar__nav">
+          <a class="nav-link active" href="#">Benchmarks</a>
+          <a class="nav-link" href="#">Build Library</a>
+          <a class="nav-link" href="#">Components</a>
+          <a class="nav-link" href="#">Alerts</a>
+          <a class="nav-link" href="#">Settings</a>
+        </nav>
+        <div class="sidebar__divider"></div>
+        <div class="sidebar__stats">
+          <div>
+            <p class="label">Frames tracked</p>
+            <p class="value">1.28B</p>
+          </div>
+          <div>
+            <p class="label">Active configs</p>
+            <p class="value">186</p>
+          </div>
+        </div>
+        <div class="sidebar__profile">
+          <div class="profile-meta">
+            <p class="profile-name">Jordan D.</p>
+            <p class="profile-role">Solutions Architect</p>
+          </div>
+          <button class="profile-action">Sign out</button>
+        </div>
+      </aside>
+
+      <main class="dashboard">
+        <header class="dashboard__header">
+          <div>
+            <p class="eyebrow">Live benchmark</p>
+            <h1 id="selectedGameTitle">Select a benchmark</h1>
+            <p id="buildSummary" class="subtext">Choose a workload to auto-configure the optimal build.</p>
+          </div>
+          <div class="header-meta">
+            <div class="stat-block">
+              <p class="label">Estimated FPS</p>
+              <p class="value" id="primaryFps">—</p>
+              <span class="chip" id="primaryPreset">—</span>
+            </div>
+            <button class="ghost-action" id="changeGame">Change game</button>
+          </div>
+        </header>
+
+        <section class="metrics-grid" aria-label="System metrics">
+          <article class="metric-card">
+            <p class="label">CPU Load</p>
+            <p class="value" id="cpuLoad">—</p>
+            <span class="trend" id="cpuLoadNotes">—</span>
+          </article>
+          <article class="metric-card">
+            <p class="label">GPU Load</p>
+            <p class="value" id="gpuLoad">—</p>
+            <span class="trend" id="gpuLoadNotes">—</span>
+          </article>
+          <article class="metric-card">
+            <p class="label">Average latency</p>
+            <p class="value" id="latency">—</p>
+            <span class="trend" id="latencyNotes">—</span>
+          </article>
+          <article class="metric-card">
+            <p class="label">Power draw</p>
+            <p class="value" id="powerDraw">—</p>
+            <span class="trend" id="powerNotes">—</span>
+          </article>
+        </section>
+
+        <section class="layout-grid">
+          <article class="viewer-panel">
+            <header class="viewer-panel__header">
+              <div>
+                <p class="label">3D Workstation</p>
+                <h2 id="buildTitle">PC Visualization</h2>
+              </div>
+              <div class="viewer-controls">
+                <button class="icon-button" data-camera="orbit">Orbit</button>
+                <button class="icon-button" data-camera="iso">Isometric</button>
+                <button class="icon-button" data-light="cycle">Lighting</button>
+              </div>
+            </header>
+            <div id="viewerCanvas" class="viewer-canvas" aria-label="PC 3D viewer"></div>
+          </article>
+
+          <article class="build-sheet">
+            <header class="build-sheet__header">
+              <div>
+                <p class="label">Build Spec</p>
+                <h2>Component stack</h2>
+              </div>
+              <button class="ghost-action">Export build</button>
+            </header>
+            <div class="spec-editor" id="specEditor" aria-label="Edit build components"></div>
+            <dl class="spec-list" id="specList"></dl>
+          </article>
+        </section>
+
+        <section class="benchmarks">
+          <header class="benchmarks__header">
+            <div>
+              <p class="label">Similar workloads</p>
+              <h2>Comparative FPS</h2>
+            </div>
+            <button class="ghost-action">View benchmark history</button>
+          </header>
+          <table class="benchmark-table" aria-label="FPS projections">
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Preset</th>
+                <th scope="col">Resolution</th>
+                <th scope="col">Estimated FPS</th>
+              </tr>
+            </thead>
+            <tbody id="comparisonTable"></tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
