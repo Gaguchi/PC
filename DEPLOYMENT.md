@@ -1,85 +1,55 @@
-# Dokploy Environment Variables Setup
+# Dokploy Deployment Guide
 
-## ⚠️ CRITICAL: Build Arguments Configuration
+## ✅ Environment Variable Setup (COMPLETED)
 
-Dokploy needs to pass environment variables as **build arguments** to Docker during the build process.
+You've correctly configured:
 
-### Step 1: Add Environment Variable in Dokploy
+- **Environment Variable:** `VITE_RAWG_API_KEY=5dfbe1e4a94847cf94ce53b04b84f90f`
+- **Build-Time Variable:** ✅ Enabled in Dokploy
 
-1. Go to your application in Dokploy
-2. Navigate to **Settings** → **Environment Variables**
-3. Add the following variable:
+The API key is now working! Console shows successful API calls.
 
-   **Name:** `VITE_RAWG_API_KEY`  
-   **Value:** `5dfbe1e4a94847cf94ce53b04b84f90f`  
-   **Build Time:** ✅ **ENABLE THIS** (critical!)
+## ⚠️ Current Issue: DNS Resolution for `media.rawg.io`
 
-### Step 2: Configure Build Arguments
+Your deployment is successfully fetching game data from RAWG API, but the browser cannot load images from `media.rawg.io` due to DNS resolution failure:
 
-Dokploy must pass the environment variable to Docker's `--build-arg` flag. Check your Dokploy build settings:
-
-**Option A: If Dokploy has a "Build Arguments" section:**
-
-- Add: `VITE_RAWG_API_KEY=${VITE_RAWG_API_KEY}`
-
-**Option B: If using custom build command:**
-
-```bash
-docker build --build-arg VITE_RAWG_API_KEY=$VITE_RAWG_API_KEY -t buildcores-benchmark .
+```
+GET https://media.rawg.io/media/games/... net::ERR_NAME_NOT_RESOLVED
 ```
 
-**Option C: If Dokploy doesn't auto-convert env vars to build args:**
-You may need to modify the Dockerfile to use a default value or create a build script.
+### Possible Causes
 
-### Step 3: Trigger Fresh Rebuild
+1. **Client-side DNS issue**: The user's browser or network can't resolve `media.rawg.io`
+2. **Firewall/Content filter**: Your server/network may block `media.rawg.io`
+3. **CORS policy**: Browser security blocking cross-origin image loads (unlikely)
 
-- Don't just restart the container
-- Trigger a **full rebuild** from source
-- Clear any build cache if available
+### Debugging Steps
+
+1. **Test DNS resolution** on your deployment server:
+
+   ```bash
+   nslookup media.rawg.io
+   ping media.rawg.io
+   ```
+
+2. **Test from your local browser**:
+   Open your deployed site on a different network (mobile hotspot, etc.)
+
+3. **Check if it's a DNS propagation issue**:
+   Use Google DNS: https://dns.google/query?name=media.rawg.io
+
+### Quick Fix: Proxy Images Through Your Backend (Recommended)
+
+Since this is a free public API key (not a secret), the DNS issue might be intermittent or location-specific. However, if you want bulletproof image loading, consider adding a backend proxy route to fetch images server-side.
+
+### Alternative: Use Cloudflare or Vercel Edge
+
+Deploy through a service with better DNS resolution and edge caching.
 
 ## Verification
 
-After redeployment, open the browser console on your deployed URL and check for:
+✅ **API Integration:** Working  
+✅ **Environment Variables:** Configured correctly  
+⚠️ **Image Loading:** DNS resolution issue with `media.rawg.io`
 
-✅ **Success:**
-
-```
-[RAWG] API Key present: true
-[RAWG] API Key value: 5dfbe1e4...
-[RAWG] Fetching: https://api.rawg.io/api/games/...
-[RAWG] Response status: 200
-[RAWG] Background image URL: https://media.rawg.io/...
-```
-
-❌ **Failure:**
-
-```
-VITE_RAWG_API_KEY not set. Game box art will not load.
-```
-
-## Important Notes
-
-1. **Build-time variable**: Vite embeds environment variables during `npm run build`, not at container runtime.
-
-2. **The `VITE_` prefix is required** for Vite to expose the variable to the client-side code.
-
-3. **Environment variables are baked into the JavaScript bundle** during build. Changing them requires a rebuild.
-
-## Manual Docker Build (for testing)
-
-If Dokploy configuration is unclear, test the build locally:
-
-```bash
-docker build --build-arg VITE_RAWG_API_KEY=5dfbe1e4a94847cf94ce53b04b84f90f -t buildcores-benchmark .
-docker run -p 8080:80 buildcores-benchmark
-```
-
-Then visit `http://localhost:8080` and check the console.
-
-## Troubleshooting Dokploy
-
-If the environment variable still doesn't work:
-
-1. **Check Dokploy documentation** for how to pass build arguments
-2. **Alternative approach**: Create a `.env.production` file committed to the repo (not recommended for secrets, but works for API keys)
-3. **Contact Dokploy support** with this question: "How do I pass environment variables as Docker build arguments?"
+The console logs show the complete flow is working - it's just the final image download that's failing due to DNS.
