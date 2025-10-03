@@ -432,20 +432,36 @@ export function initUI() {
   // Fetch game box art from RAWG.io API
   const fetchGameBoxArt = async (gameKey) => {
     const slug = rawgSlugs[gameKey];
-    if (!slug || !RAWG_API_KEY) {
-      console.warn('RAWG API key missing or invalid game key:', gameKey);
+    if (!slug) {
+      console.warn('[RAWG] Invalid game key:', gameKey);
+      return null;
+    }
+
+    if (!RAWG_API_KEY) {
+      console.warn('[RAWG] API key not set. Add VITE_RAWG_API_KEY to environment variables.');
       return null;
     }
 
     try {
-      const response = await fetch(`${RAWG_BASE_URL}/games/${slug}?key=${RAWG_API_KEY}`);
+      const url = `${RAWG_BASE_URL}/games/${slug}?key=${RAWG_API_KEY}`;
+      console.log('[RAWG] Fetching:', url);
+      
+      const response = await fetch(url);
+      console.log('[RAWG] Response status:', response.status, response.statusText);
+      
       if (!response.ok) {
-        throw new Error(`RAWG API error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('[RAWG] API error response:', errorText);
+        throw new Error(`RAWG API error: ${response.status} - ${errorText}`);
       }
+      
       const data = await response.json();
+      console.log('[RAWG] Game data for', gameKey, ':', data);
+      console.log('[RAWG] Background image URL:', data.background_image);
+      
       return data.background_image || null;
     } catch (error) {
-      console.error('Failed to fetch box art for', gameKey, error);
+      console.error('[RAWG] Failed to fetch box art for', gameKey, ':', error);
       return null;
     }
   };
@@ -517,16 +533,28 @@ export function initUI() {
 
   // Load box art for all game options on init
   const loadGameBoxArt = async () => {
+    console.log('[RAWG] Starting box art load...');
+    console.log('[RAWG] API Key present:', !!RAWG_API_KEY);
+    console.log('[RAWG] API Key value:', RAWG_API_KEY ? `${RAWG_API_KEY.slice(0, 8)}...` : 'NOT SET');
+    
     const artContainers = gameGrid.querySelectorAll('[data-game-art]');
+    console.log('[RAWG] Found', artContainers.length, 'game art containers');
     
     for (const container of artContainers) {
       const gameKey = container.dataset.gameArt;
+      console.log('[RAWG] Loading box art for:', gameKey);
+      
       const imageUrl = await fetchGameBoxArt(gameKey);
       
       if (imageUrl) {
+        console.log('[RAWG] Setting background image for', gameKey, ':', imageUrl);
         container.style.backgroundImage = `url(${imageUrl})`;
+      } else {
+        console.warn('[RAWG] No image URL returned for', gameKey);
       }
     }
+    
+    console.log('[RAWG] Box art loading complete');
   };
 
   // Initialize box art loading
