@@ -7,8 +7,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Copy source files and build
+# Copy source files
 COPY . .
+
+# Accept build-time environment variables
+ARG VITE_RAWG_API_KEY
+ENV VITE_RAWG_API_KEY=$VITE_RAWG_API_KEY
+
+# Build the application (Vite will embed env vars at build time)
 RUN npm run build
 
 # Stage 2: Serve with nginx
