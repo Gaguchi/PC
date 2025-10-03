@@ -1,3 +1,17 @@
+// RAWG.io API configuration
+const RAWG_API_KEY = import.meta.env.VITE_RAWG_API_KEY || '';
+const RAWG_BASE_URL = 'https://api.rawg.io/api';
+
+// Map game keys to RAWG slugs for API lookup
+const rawgSlugs = {
+  cyberpunk2077: 'cyberpunk-2077',
+  starfield: 'starfield',
+  helldivers2: 'helldivers-2',
+  cs2: 'counter-strike-2',
+  fortnite: 'fortnite',
+  forza: 'forza-horizon-5'
+};
+
 const gameDatabase = {
   cyberpunk2077: {
     title: 'Cyberpunk 2077',
@@ -415,7 +429,28 @@ export function initUI() {
 
   buildSpecEditor();
 
-  const applyGame = (key) => {
+  // Fetch game box art from RAWG.io API
+  const fetchGameBoxArt = async (gameKey) => {
+    const slug = rawgSlugs[gameKey];
+    if (!slug || !RAWG_API_KEY) {
+      console.warn('RAWG API key missing or invalid game key:', gameKey);
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${RAWG_BASE_URL}/games/${slug}?key=${RAWG_API_KEY}`);
+      if (!response.ok) {
+        throw new Error(`RAWG API error: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.background_image || null;
+    } catch (error) {
+      console.error('Failed to fetch box art for', gameKey, error);
+      return null;
+    }
+  };
+
+  const applyGame = async (key) => {
     const data = gameDatabase[key];
     if (!data) {
       console.warn('No data found for game:', key);
@@ -479,6 +514,27 @@ export function initUI() {
     overlay.setAttribute('aria-hidden', 'false');
     setEditorNote();
   });
+
+  // Load box art for all game options on init
+  const loadGameBoxArt = async () => {
+    const artContainers = gameGrid.querySelectorAll('[data-game-art]');
+    
+    for (const container of artContainers) {
+      const gameKey = container.dataset.gameArt;
+      const imageUrl = await fetchGameBoxArt(gameKey);
+      
+      if (imageUrl) {
+        container.style.backgroundImage = `url(${imageUrl})`;
+      }
+    }
+  };
+
+  // Initialize box art loading
+  if (RAWG_API_KEY) {
+    loadGameBoxArt();
+  } else {
+    console.warn('VITE_RAWG_API_KEY not set. Game box art will not load.');
+  }
 
   return { applyGame };
 }
